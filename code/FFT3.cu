@@ -241,7 +241,7 @@ void fft2D(vector<vector<base>> &a, bool invert, int balance, int threads, int v
     for (auto i = 0; i < matrix.size(); i++)
     {
         //cout<<i<<endl;
-        // applyHanningWindow(matrix[i]);
+        applyHanningWindow(matrix[i]);
         fft(matrix[i], invert, balance, threads);
     }
 
@@ -268,7 +268,7 @@ void fft2D(vector<vector<base>> &a, bool invert, int balance, int threads, int v
 
     // Transform the columns
     for (auto i = 0; i < matrix.size(); i++){
-        // applyHanningWindow(matrix[i]);
+        applyHanningWindow(matrix[i]);
         fft(matrix[i], invert, balance, threads);
     }
 
@@ -446,6 +446,53 @@ void compress_image(vector<vector<uint>> &image, double threshold, int balance, 
 }
 
 
+void fft3(vector<vector<vector<base>>> &a, bool invert, bool balance, int threads) {
+    int nx = a.size();
+    int ny = a[0].size();
+    int nz = a[0][0].size();
+
+    // Perform 2D FFT on each slice along the z dimension
+    for (int z = 0; z < nz; z++) {
+        vector<vector<base>> slice(nx, vector<base>(ny));
+        for (int x = 0; x < nx; x++) {
+            for (int y = 0; y < ny; y++) {
+                slice[x][y] = a[x][y][z];
+            }
+        }
+        fft2D(slice, invert, balance, threads);
+        for (int x = 0; x < nx; x++) {
+            for (int y = 0; y < ny; y++) {
+                a[x][y][z] = slice[x][y];
+            }
+        }
+    }
+
+    // Transpose the data so that the z dimension becomes the y dimension
+    vector<vector<vector<base>>> transposed(nz, vector<vector<base>>(nx, vector<base>(ny)));
+    for (int x = 0; x < nx; x++) {
+        for (int y = 0; y < ny; y++) {
+            for (int z = 0; z < nz; z++) {
+                transposed[z][x][y] = a[x][y][z];
+            }
+        }
+    }
+
+    // Perform 2D FFT on each slice along the new z dimension
+    for (int z = 0; z < nz; z++) {
+        fft2D(transposed[z], invert, balance, threads);
+    }
+
+    // Transpose the data back to its original orientation
+    for (int x = 0; x < nx; x++) {
+        for (int y = 0; y < ny; y++) {
+            for (int z = 0; z < nz; z++) {
+                a[x][y][z] = transposed[z][x][y];
+            }
+        }
+    }
+}
+
+
 
 void write2DVectorToFile(const std::vector<std::vector<uint>>& data, const std::string& filename) {
     std::ofstream file(filename);
@@ -489,6 +536,32 @@ vector<vector<uint>> read_2d_vector(const std::string& file_path) {
     return data;
 }
 
+bool areEqual(const vector<vector<vector<base>>>& vec1, const vector<vector<vector<base>>>& vec2) {
+    if (vec1.size() != vec2.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < vec1.size(); ++i) {
+        if (vec1[i].size() != vec2[i].size()) {
+            return false;
+        }
+
+        for (size_t j = 0; j < vec1[i].size(); ++j) {
+            if (vec1[i][j].size() != vec2[i][j].size()) {
+                return false;
+            }
+
+            for (size_t k = 0; k < vec1[i][j].size(); ++k) {
+                if (abs(vec1[i][j][k] - vec2[i][j][k]) > 1e-6) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
 
 int main()
 {
@@ -508,29 +581,75 @@ int main()
     //         image[i][j] = uint(image_M.at<uint>(i, j));
 
     // auto temp_image = image;
-    cout <<"here";
-    std::vector<std::vector<uint>> image = read_2d_vector("image2d.txt");
-    cout << "here2";
+
+    // std::vector<std::vector<uint>> image = read_2d_vector("image2d.txt");
+
     // write2DVectorToFile(image, "originalImage.txt");
     
-    // fft.compress_image(image, 0.00005, 0);
+    // // fft.compress_image(image, 0.00005, 0);
     // freopen("out.txt", "w", stdout);
-    int count = 1;
-    for(double thresh = 0.000001; thresh < 1; thresh*=10)
-    {
-        cout << "For thresh= " << thresh << endl;
-        compress_image(image, thresh, BALANCE, 16, 0);
-        // for (int i = 0; i < image_M.rows; ++i)
-        //     for (int j = 0; j < image_M.cols; ++j)
-        //         image_M.at<uint>(i, j) = image[i][j];
-        // string s = "compressed_";
-        // s = s+to_string(thresh);
-        // s += ".jpg";
-        // cv::imwrite(s, image_M);
+    // for(double thresh = 0.000001; thresh < 1; thresh*=10)
+    // {
+    //     cout << "For thresh= " << thresh << endl;
+    //     compress_image(image, thresh, BALANCE, 10, 0);
+    //     // for (int i = 0; i < image_M.rows; ++i)
+    //     //     for (int j = 0; j < image_M.cols; ++j)
+    //     //         image_M.at<uint>(i, j) = image[i][j];
+    //     // string s = "compressed_";
+    //     // s = s+to_string(thresh);
+    //     // s += ".jpg";
+    //     // cv::imwrite(s, image_M);
         
-        //call write2DVectorToFile function to write to a file having filename based on threshold
-        write2DVectorToFile(image, "./compressedTxt/compressed_image_"+to_string(count)+".txt");
-        count++;
+    //     //call write2DVectorToFile function to write to a file having filename based on threshold
+    //     write2DVectorToFile(image, "compressed_image_"+to_string(thresh)+".txt");
+    // }
+    // Initialize 3D vector with sample data
+
+    int nx = 10, ny = 10, nz = 10;  // replace with your actual dimensions
+    vector<vector<vector<base>>> data(nx, vector<vector<base>>(ny, vector<base>(nz)));
+    vector<vector<vector<base>>> dataOrig(nx, vector<vector<base>>(ny, vector<base>(nz)));
+
+    // Fill the 3D vector with your sample data
+    for (int x = 0; x < nx; x++) {
+        for (int y = 0; y < ny; y++) {
+            for (int z = 0; z < nz; z++) {
+                // replace with your actual data
+                data[x][y][z] = 1.0;
+                dataOrig[x][y][z] = 1.0;
+            }
+        }
+    }
+
+    // Invoke the fft3 function
+    bool invert = false; 
+    bool balance = false;  
+    int threads = 4;  
+    fft3(data, invert, balance, threads);
+
+    // perform inverse FFT3
+    fft3(data, true, balance, threads);
+
+    // Check the result
+    bool correct = true;
+    double epsilon = 1e-1; // or a value that is acceptable in your context
+    for (int x = 0; x < nx; x++) {
+        for (int y = 0; y < ny; y++) {
+            for (int z = 0; z < nz; z++) {
+                cout << data[x][y][z] << " ";
+                if (abs(data[x][y][z] - dataOrig[x][y][z]) > epsilon) {
+                    correct = false;
+                    // break;
+                }
+            }
+            // if (!correct) break;
+        }
+        // if (!correct) break;
+    }
+
+    if (correct) {
+        cout << "FFT3 is working correctly." << endl;
+    } else {
+        cout << "FFT3 is not working correctly." << endl;
     }
 
 

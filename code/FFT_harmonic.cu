@@ -241,7 +241,7 @@ void fft2D(vector<vector<base>> &a, bool invert, int balance, int threads, int v
     for (auto i = 0; i < matrix.size(); i++)
     {
         //cout<<i<<endl;
-        // applyHanningWindow(matrix[i]);
+        applyHanningWindow(matrix[i]);
         fft(matrix[i], invert, balance, threads);
     }
 
@@ -268,7 +268,7 @@ void fft2D(vector<vector<base>> &a, bool invert, int balance, int threads, int v
 
     // Transform the columns
     for (auto i = 0; i < matrix.size(); i++){
-        // applyHanningWindow(matrix[i]);
+        applyHanningWindow(matrix[i]);
         fft(matrix[i], invert, balance, threads);
     }
 
@@ -492,47 +492,36 @@ vector<vector<uint>> read_2d_vector(const std::string& file_path) {
 
 int main()
 {
-    // cv::Mat image_M;
-    // image_M = imread("squirrel.jpg", IMREAD_GRAYSCALE);
-    // if (!image_M.data)
-    // {
-    //     cout << "Could not open or find the image" << std::endl;
-    //     return -1;
-    // }
-    
+    const int size = 100;
+    const double pi = 3.14159265358979323846;
+    const double frequency1 = 0.1;
+    const double frequency2 = 0.2;
 
-    // cv::imwrite("original.jpg", image_M);
-    // vector<vector<uint>> image(image_M.rows, vector<uint>(image_M.cols));
-    // for (int i = 0; i < image_M.rows; ++i)
-    //     for (int j = 0; j < image_M.cols; ++j)
-    //         image[i][j] = uint(image_M.at<uint>(i, j));
+    std::vector<std::vector<base>> data(size, std::vector<base>(size));
 
-    // auto temp_image = image;
-    cout <<"here";
-    std::vector<std::vector<uint>> image = read_2d_vector("image2d.txt");
-    cout << "here2";
-    // write2DVectorToFile(image, "originalImage.txt");
-    
-    // fft.compress_image(image, 0.00005, 0);
-    // freopen("out.txt", "w", stdout);
-    int count = 1;
-    for(double thresh = 0.000001; thresh < 1; thresh*=10)
-    {
-        cout << "For thresh= " << thresh << endl;
-        compress_image(image, thresh, BALANCE, 16, 0);
-        // for (int i = 0; i < image_M.rows; ++i)
-        //     for (int j = 0; j < image_M.cols; ++j)
-        //         image_M.at<uint>(i, j) = image[i][j];
-        // string s = "compressed_";
-        // s = s+to_string(thresh);
-        // s += ".jpg";
-        // cv::imwrite(s, image_M);
-        
-        //call write2DVectorToFile function to write to a file having filename based on threshold
-        write2DVectorToFile(image, "./compressedTxt/compressed_image_"+to_string(count)+".txt");
-        count++;
+    for (int i = 0; i < size; ++i) {
+        for (int j = 0; j < size; ++j) {
+            data[i][j] = sin(2 * pi * frequency1 * i) + sin(2 * pi * frequency2 * j);
+        }
     }
 
+    // Perform the FFT
+    fft2D(data, false, BALANCE, 32, 0);
+
+    std::vector<std::vector<uint>> new_data(size, std::vector<uint>(size));
+    for (int i = 0; i < size; ++i) {
+        for (int j = 0; j < size; ++j) {
+            // static cast base to unit before assigning to new_data
+            new_data[i][j] = static_cast<uint>(data[i][j].real());
+            // new_data[i][j] = data[i][j];
+        }
+    }
+
+    // Write the data to a file
+    write2DVectorToFile(new_data, "dataFFT.txt");
+
+    // Now `data` contains a 2D signal composed of two sine waves of different frequencies
+    // You can perform your harmonic analysis on `data`
 
     return 0;
 }

@@ -1,0 +1,13 @@
+{
+    "configurations": [
+        {
+            "name": "CUDA C++: Launch",
+            "type": "cuda-gdb",
+            "request": "launch",
+            "program": "${workspaceFolder}/simpleCUFFT",
+            "env": {
+                "LD_LIBRARY_PATH": "/usr/local/cuda-12.4/targets/x86_64-linux/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}", 
+            },
+        }
+    ]
+}

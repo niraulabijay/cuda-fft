@@ -135,6 +135,15 @@ __global__ void inplace_fft_outer(Complex_my *__restrict__ A, int len, int n, in
     }
 }
 
+// CUDA Kernel function to generate the Hanning window
+__global__ void hanningWindow(float *d_in, int N, float scale_factor=1.0) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < N) {
+        float scale = 2.0f * 3.14159265358979323846f / (N - 1);
+        d_in[idx] *= scale_factor * 0.5f * (1.0f - cosf(scale * idx));
+    }
+}
+
 
 class FFT
 {
@@ -150,46 +159,68 @@ public:
      * Arguments vector of complex numbers, invert, balance, number of threads
      * Perform inplace transform
      */
-    void fft(vector<base> &a, bool invert)
+    void fft(vector<base> &a, bool invert, int balance = 10, int threads = 32)
     {
-        // Performing Bit reversal ordering
+        // Creating array from vector
         int n = (int)a.size();
-
-        for (int i = 1, j = 0; i < n; ++i)
+        int data_size = n * sizeof(Complex_my);
+        Complex_my *data_array = (Complex_my *)malloc(data_size);
+        for (int i = 0; i < n; i++)
         {
-            int bit = n >> 1;
-            for (; j >= bit; bit >>= 1)
-                j -= bit;
-            j += bit;
-            if (i < j)
-                swap(a[i], a[j]);
+            data_array[i].x = a[i].real();
+            data_array[i].y = a[i].imag();
         }
+        
+        // Copying data to GPU
+        Complex_my *A, *dn;
+        cudaMalloc((void **)&A, data_size);
+        cudaMalloc((void **)&dn, data_size);
+        cudaMemcpy(dn, data_array, data_size, cudaMemcpyHostToDevice);
+        // Bit reversal reordering
+        int s = log2(n);
 
-        // Iteratinve FFT
-        // This part of FFT is parallelizable
+        bitrev_reorder<<<ceil(float(n) / threads), threads>>>(A, dn, s, threads, n);
+
+        
+        // Synchronize
+        cudaDeviceSynchronize();
+        // Iterative FFT with loop parallelism balancing
         for (int len = 2; len <= n; len <<= 1)
         {
-            double ang = 2 * M_PI / len * (invert ? 1 : -1);
-            base wlen(cos(ang), sin(ang));
-            for (int i = 0; i < n; i += len)
+            if (n / len > balance)
             {
-                base w(1);
-                for (int j = 0; j < len / 2; ++j)
+
+                inplace_fft_outer<<<ceil((float)n / threads / len), threads>>>(A, len, n, threads, invert);
+            }
+            else
+            {
+                for (int i = 0; i < n; i += len)
                 {
-                    base u = a[i + j], v = a[i + j + len / 2] * w;
-                    a[i + j] = u + v;
-                    a[i + j + len / 2] = u - v;
-                    w *= wlen;
+                    float repeats = len / 2;
+                    inplace_fft<<<ceil(repeats / threads), threads>>>(A, i, len, n, threads, invert);
                 }
             }
         }
-
+        
         if (invert)
-            for (int i = 0; i < n; ++i)
-                a[i] /= n;
+            inplace_divide_invert<<<ceil(n * 1.00 / threads), threads>>>(A, n, threads);
+
+        // Copy data from GPU
+        Complex_my *result;
+        result = (Complex_my *)malloc(data_size);
+        cudaMemcpy(result, A, data_size, cudaMemcpyDeviceToHost);
+        
+        // Saving data to vector<complex> in input.
+        for (int i = 0; i < n; i++)
+        {
+            a[i] = base(result[i].x, result[i].y);
+        }
+        // Free the memory blocks
+        free(data_array);
+        cudaFree(A);
+        cudaFree(dn);
         return;
     }
-
     /**
      * Performs 2D FFT 
      * takes vector of complex vectors, invert and verbose as argument
@@ -202,6 +233,7 @@ public:
         if (verbose > 0)
             cout << "Transforming Rows" << endl;
 
+        
         for (auto i = 0; i < matrix.size(); i++)
         {
             //cout<<i<<endl;
@@ -247,6 +279,18 @@ public:
         }
     }
 
+    void applyHanningWindow(vector<base> &a) {
+        float *d_in;
+        cudaMalloc(&d_in, a.size() * sizeof(base));
+        cudaMemcpy(d_in, a.data(), a.size() * sizeof(base), cudaMemcpyHostToDevice);
+
+        hanningWindow<<<(a.size() + 255) / 256, 256>>>(d_in, a.size());
+        cudaDeviceSynchronize();
+
+        cudaMemcpy(a.data(), d_in, a.size() * sizeof(base), cudaMemcpyDeviceToHost);
+        cudaFree(d_in);
+    }
+
     
     /**
      * Function to multiply two polynomial
@@ -265,6 +309,10 @@ public:
         n <<= 1;
 
         fa.resize(n), fb.resize(n);
+                
+        // Usage:
+        applyHanningWindow(fa);
+        applyHanningWindow(fb);
 
         // Transforming both a and b
         // Converting to points form
@@ -286,115 +334,6 @@ public:
         return res;
     }
 
-    /**
-     * Function to perform jpeg compression on image
-     * takes image, threshold, verbose as input
-     * image is represented as vector<vector>
-     * perform inplace compression on the input
-     */
-    void compress_image(vector<vector<uint8_t>> &image, double threshold, int verbose = 1)
-    {
-        //Convert image to complex type
-
-        vector<vector<base>> complex_image(image.size(), vector<base>(image[0].size()));
-        for (auto i = 0; i < image.size(); i++)
-        {
-            for (auto j = 0; j < image[0].size(); j++)
-            {
-                complex_image[i][j] = image[i][j];
-            }
-        }
-        if (verbose == 1)
-        {
-            cout << "input Image" << endl;
-            //cout << image;
-            cout << endl
-                 << endl;
-        }
-        if (verbose > 1)
-        {
-            cout << "Complex Image" << endl;
-            cout << complex_image;
-            cout << endl
-                 << endl;
-        }
-
-        //Perform 2D fft on image
-
-        fft2D(complex_image, false, verbose);
-
-        if (verbose == 1)
-        {
-            cout << "Performing FFT on Image" << endl;
-            ///cout << complex_image;
-            cout << endl
-                 << endl;
-        }
-
-        //Threshold the fft
-
-        // for (int i = 0; i < image_M.rows; ++i)
-        //     for (int j = 0; j < image_M.cols; ++j)
-        //         image_M.at<uint8_t>(i, j) = image[i][j];
-
-        double maximum_value = 0.0;
-        for (int i = 0; i < complex_image.size(); i++)
-        {
-            for (int j = 0; j < complex_image[0].size(); j++)
-            {
-                maximum_value = max(maximum_value, abs(complex_image[i][j]));
-            }
-        }
-        threshold *= maximum_value;
-        cout << "threshold :" << threshold << endl;
-        int count = 0;
-
-        // Setting values less than threshold to zero
-        // This step is responsible for compression
-        for (int i = 0; i < complex_image.size(); i++)
-        {
-            for (int j = 0; j < complex_image[0].size(); j++)
-            {
-                if (abs(complex_image[i][j]) < threshold)
-                {
-                    count++;
-                    complex_image[i][j] = 0;
-                }
-            }
-        }
-        cout << count << endl;
-        if (verbose > 1)
-        {
-            cout << "Thresholded Image" << endl;
-            //cout << complex_image;
-            cout << endl
-                 << endl;
-        }
-
-        // Perform inverse FFT
-        fft2D(complex_image, true, verbose);
-        if (verbose > 1)
-        {
-            cout << "Inverted Image" << endl;
-            //cout << complex_image;
-            cout << endl
-                 << endl;
-        }
-        //Convert to uint8 format
-        // We will consider only the real part of the image
-        for (int i = 0; i < complex_image.size(); i++)
-        {
-            for (int j = 0; j < complex_image[0].size(); j++)
-            {
-                image[i][j] = uint8_t(complex_image[i][j].real() + 0.5);
-            }
-        }
-        if (verbose > 0)
-        {
-            cout << "Compressed Image" << endl;
-            //cout << image;
-        }
-    }
 };
 
 
@@ -406,7 +345,7 @@ int main()
     // vector<int> a = {1,1};
     // vector<int> b = {1,2,3};
     // Define vector size
-    const int vector_size = 1000000;
+    const int vector_size = 10;
 
     // Initialize random number generator
     std::random_device rd;
@@ -423,9 +362,9 @@ int main()
     }
 
     auto multiplier = FFT();
-    // cout<<"A = "<<a;
-    // cout<<"B = "<<b;
-    // cout<<"A * B = "<<multiplier.mult(a, b)<<endl;
-    multiplier.mult(a, b);
+    cout<<"A = "<<a;
+    cout<<"B = "<<b;
+    cout<<"A * B = "<<multiplier.mult(a, b)<<endl;
+    // multiplier.mult(a, b);
     return 0;
 }

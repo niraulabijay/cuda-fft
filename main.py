@@ -23,7 +23,7 @@ def create_image_from_2d_vector(file_path, output_image_path):
 
 # Loop from  0.000001 to 0.1 with step 10 and create image from 2d vector
 for i in range(1, 7):
-    create_image_from_2d_vector('./compressedTxt/compressed_image_'+str(i)+'.txt', './compressedImg/new_image_' + str(i) + '.png')
+    create_image_from_2d_vector('./compressedTxt/compressed_image_'+str(i)+'.txt', './compressedImg/new_image_' + str(i) + '.jpg')
 
 
 # create_image_from_2d_vector('image2dcuda.txt', 'new_squirrel.png')

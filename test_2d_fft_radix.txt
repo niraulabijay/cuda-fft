@@ -1,0 +1,48 @@
+This function first applies fft_radix4 to the rows of the matrix, then transposes the matrix, 
+applies fft_radix4 to the rows of the transposed matrix (which are the columns of the original matrix), 
+and finally transposes the result back.
+
+void fft2D(vector<vector<base>> &a, bool invert, int balance, int threads, int verbose = 0)
+{
+    auto matrix = a;
+    // Transform the rows
+    if (verbose > 0)
+        cout << "Transforming Rows" << endl;
+
+    for (auto i = 0; i < matrix.size(); i++)
+    {
+        fft_radix4(matrix[i], invert, balance, threads);
+    }
+
+    // preparing for transforming columns
+    if (verbose > 0)
+        cout << "Converting Rows to Columns" << endl;
+
+    // Transpose the matrix
+    a = matrix;
+    matrix.resize(a[0].size());
+    for (int i = 0; i < matrix.size(); i++)
+        matrix[i].resize(a.size());
+
+    for (int i = 0; i < a.size(); i++)
+        for (int j = 0; j < a[0].size(); j++)
+            matrix[j][i] = a[i][j];
+
+    // Transform the columns (which are now rows of the transposed matrix)
+    if (verbose > 0)
+        cout << "Transforming Columns" << endl;
+
+    for (auto i = 0; i < matrix.size(); i++)
+    {
+        fft_radix4(matrix[i], invert, balance, threads);
+    }
+
+    // Transpose the matrix back
+    a.resize(matrix[0].size());
+    for (int i = 0; i < a.size(); i++)
+        a[i].resize(matrix.size());
+
+    for (int i = 0; i < matrix.size(); i++)
+        for (int j = 0; j < matrix[0].size(); j++)
+            a[j][i] = matrix[i][j];
+}

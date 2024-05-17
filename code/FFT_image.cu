@@ -1101,49 +1101,72 @@ void test_fft2D_radix4() {
     }
 }
 
+std::vector<std::vector<base>> generate_2d_data(int rows, int cols) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis(-1.0, 1.0);
 
+    std::vector<std::vector<base>> data(rows, std::vector<base>(cols));
 
-int main()
-{
-    // test_fft2D_radix4();
-
-    std::vector<std::vector<uint>> image = read_2d_vector("image2d.txt");
-    
-    int count = 1;
-    
-
-    for(double thresh = 0.0000000001; thresh < 0.0001; thresh *= 10)
-    {
-        cout << "For thresh= " << thresh << endl;
-        compress_image_radix4(image, thresh, BALANCE, 16, 0);
-        
-        //call write2DVectorToFile function to write to a file having filename based on threshold
-        write2DVectorToFile(image, "./compressedTxt/compressed_image_"+to_string(count)+".txt");
-        count++;
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            double real_part = dis(gen);
+            double imag_part = dis(gen);
+            data[i][j] = base(real_part, imag_part);
+        }
     }
 
-
-    return 0;
+    return data;
 }
+
+
+// int main()
+// {
+//     // test_fft2D_radix4();
+
+//     std::vector<std::vector<uint>> image = read_2d_vector("image2d.txt");
+    
+//     int count = 1;
+    
+
+//     for(double thresh = 0.000001; thresh < 0.1; thresh *= 10)
+//     {
+//         cout << "For thresh= " << thresh << endl;
+//         compress_image(image, thresh, BALANCE, 1, 0);
+        
+//         //call write2DVectorToFile function to write to a file having filename based on threshold
+//         write2DVectorToFile(image, "./compressedTxt/compressed_image_"+to_string(count)+".txt");
+//         count++;
+//     }
+
+
+//     return 0;
+// }
 
 
 // int main() {
 //     // Initialize the input data
-//      base w1,w2,w3,w4;
+//     base w1,w2,w3,w4;
 //     w1.real(1.0);
 //     w1.imag(0.0);
-
 //     w2.real(1.0);
 //     w2.imag(0.0);
-
 //     w3.real(1.0);
 //     w3.imag(0.0);
-
-    
 //     w4.real(1.0);
 //     w4.imag(0.0);
 //     std::vector<base> data_complex = {w1,w2,w3, w4};
 //     std::vector<base> data(data_complex.begin(), data_complex.end());
+
+//     // Perform the FFT using parallel fft
+//     fft(data, false);
+
+//     std::cout << "FFT using loop parallel balancing: " << std::endl;
+//     // Print the output
+//     for (int i = 0; i < data.size(); i++) {
+//         std::cout << data[i].real() << " + " << data[i].imag() << "i" << std::endl;
+//     }
+//     cout << std::endl;
 
 //     // Perform the FFT using fft_radix4
 //     fft_radix4(data, false);
@@ -1153,6 +1176,7 @@ int main()
 //     for (int i = 0; i < data.size(); i++) {
 //         std::cout << data[i].real() << " + " << data[i].imag() << "i" << std::endl;
 //     }
+//     cout << std::endl;
 
 //     // Perform the FFT using the Cooley-Tukey algorithm
 //     std::vector<std::complex<double>> data_cooley_tukey = {1, 1, 1, 1};
@@ -1167,3 +1191,78 @@ int main()
 
 //     return 0;
 // }
+
+
+// int main() {
+//     int threads = 16;
+//     // Generate a 1024x1024 array of complex numbers
+//     std::vector<std::vector<base>> data = generate_2d_data(512, 512);
+
+//     // Start the clock
+//     auto start = std::chrono::high_resolution_clock::now();
+
+//     // Call fft2d
+//     fft2D(data, false, BALANCE, threads);
+
+//     // Stop the clock
+//     auto stop = std::chrono::high_resolution_clock::now();
+
+//     // Calculate the duration
+//     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+
+//     std::cout << "Time taken by fft2d: " << (duration.count())/(1000000.0) << " milliseconds" << std::endl;
+
+//     // Repeat for fft2d_radix4
+//     start = std::chrono::high_resolution_clock::now();
+
+//     fft2D_radix4(data, false, BALANCE, threads);
+
+//     stop = std::chrono::high_resolution_clock::now();
+
+//     duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+
+//     std::cout << "Time taken by fft2d_radix4: " << (duration.count())/(1000000.0) << " milliseconds" << std::endl;
+
+//     return 0;
+// }
+
+int main() {
+    std::vector<int> matrix_sizes = { 16384};
+    std::vector<int> thread_counts = {1, 64, 128, 512, 1024};
+
+    for (int size : matrix_sizes) {
+        for (int threads : thread_counts) {
+            // Generate a size x size array of complex numbers
+            std::vector<std::vector<base>> data = generate_2d_data(size, size);
+
+            // Start the clock
+            auto start = std::chrono::high_resolution_clock::now();
+
+            // Call fft2d
+            fft2D(data, false, BALANCE, threads);
+
+            // Stop the clock
+            auto stop = std::chrono::high_resolution_clock::now();
+
+            // Calculate the duration
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+
+            std::cout << "Matrix size: " << size << "x" << size << ", Threads: " << threads << "\n";
+            std::cout << "Time taken by fft2d: " << (duration.count())/(1000000.0) << " milliseconds" << std::endl;
+
+            // Repeat for fft2d_radix4
+            start = std::chrono::high_resolution_clock::now();
+
+            fft2D_radix4(data, false, BALANCE, threads);
+
+            stop = std::chrono::high_resolution_clock::now();
+
+            duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+
+            std::cout << "Time taken by fft2d_radix4: " << (duration.count())/(1000000.0) << " milliseconds" << std::endl;
+        }
+    }
+
+    return 0;
+}
+
